@@ -208,7 +208,7 @@ def main():
     interpolation_methods = ["newton", "quadratic_spline"]
 
     # Путь для сохранения результатов
-    plot_dir = 'plots/task4_dop'
+    plot_dir = '../plots/task4_dop'
     create_directory(plot_dir)
     for dist_method in distribution_methods:
         for inter_method in interpolation_methods:

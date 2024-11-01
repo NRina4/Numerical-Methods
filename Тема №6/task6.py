@@ -195,7 +195,7 @@ def main():
     approximation_methods = ["normal", "orthogonal"]
 
     # Путь для сохранения результатов
-    plot_dir = 'plots/task6'
+    plot_dir = 'plots'
     create_directory(plot_dir)
 
     # Генерация данных

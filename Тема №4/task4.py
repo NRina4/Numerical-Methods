@@ -291,7 +291,7 @@ def main():
     interpolation_methods = ["lagrange", "newton", "linear_spline", "quadratic_spline", "cubic_spline"]
 
     # Путь для сохранения результатов
-    plot_dir = 'plots/task4'
+    plot_dir = 'plots'
     create_directory(plot_dir)
 
     for dist_method in distribution_methods:
