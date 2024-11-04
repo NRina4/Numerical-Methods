@@ -1,31 +1,21 @@
 import numpy as np
-import scipy.integrate as integrate
-import matplotlib.pyplot as plt
-
-e = 1e-6
 
 
-def f(x):
-    """ Пользовательская функция. """
-    return 0.5 * np.cos(2 * x) * np.exp(2 * x / 5) + 2.4 * np.sin(1.5 * x) * np.exp(-6 * x) + 6 * x
+def mnt(z1, z3, a, alpha):
+    """Вычисление моментов. """
+    nu0 = ((z3 - a) ** (1 - alpha) - (z1 - a) ** (1 - alpha)) / (1 - alpha)
+    nu1 = ((z3 - a) ** (2 - alpha) - (z1 - a) ** (2 - alpha)) / (2 - alpha) + nu0 * a
+    nu2 = ((z3 - a) ** (3 - alpha) - (z1 - a) ** (3 - alpha)) / (3 - alpha) + nu1 * 2 * a - nu0 * a ** 2
+    return np.array([nu0, nu1, nu2])
 
 
-def p(x):
-    """ Весовая функция. """
-    a = 1.1
-    b = 2.5
-    alpha = 2 / 5
-    beta = 0
-    return ((x - a) ** (-alpha)) * ((b - x) ** (-beta))
+def mnt_new(i, z1, z3, alpha):
+    """Вычисление моментов порядка i на каждом частичном промежутке [a, b] в новых переменных (t = x - a)"""
+    return (z1**(i-alpha+1) - z3**(i-alpha+1)) / (i-alpha+1)
 
 
-def F(x):
-    """ Подынтегральная функция. """
-    return p(x) * f(x)
-
-
-# Задание 1 ////////////////////////////////////////////////////////////////////////////////////////////////////////// #
-# 1. Квадратурные формулы: Прямоугольники, Трапеция, Симпсон
+# Задание 1.1 //////////////////////////////////////////////////////////////////////////////////////////////////////// #
+# Квадратурные формулы: Прямоугольники, Трапеция, Симпсон
 def left_rectangle_method(f, a, b, n):
     h = (b - a) / n
     return h * sum(f(a + i * h) for i in range(n))
@@ -57,31 +47,30 @@ def simpson_method(f, a, b, n):
     return result * h / 3
 
 
-# 1.2. 3-точечная формула Ньютона-Кот(е)са
-def newton_cotes_3point(f, a, b, alpha, n):
+# Задание 1.2 //////////////////////////////////////////////////////////////////////////////////////////////////////// #
+# 3-точечная формула Ньютона-Кот(е)са
+def newton_cotes_3point(f, a, b, n, alpha):
     h = (b - a) / n
+
     result = 0
-    for i in range(n):
-        z1 = a + h * i
-        z3 = a + h * (i + 1)
+    for i in range(n-1):
+        z1 = a + i * h
+        z3 = a + (i + 1) * h
         z2 = (z1 + z3) / 2
 
-        nu0 = ((z3 - a) ** (1 - alpha) - (z1 - a) ** (1 - alpha)) / (1 - alpha)
-        nu1 = ((z3 - a) ** (2 - alpha) - (z1 - a) ** (2 - alpha)) / (2 - alpha) + nu0 * a
-        nu2 = ((z3 - a) ** (3 - alpha) - (z1 - a) ** (3 - alpha)) / (3 - alpha) + nu1 * 2 * a - nu0 * a ** 2
+        nu = mnt(z1, z3, a, alpha)
 
-        # matrix_z = np.array([
-        #     [1, 1, 1],
-        #     [z1, z2, z3],
-        #     [z1 ** 2, z2 ** 2, z3 ** 2]
-        # ])
-        # A = np.linalg.solve(matrix_z, np.array([nu0, nu1, nu2]))
+        # Собственные подсчёты из учебника
+        # A1 = (nu[2] - nu[1] * (z2 + z3) + nu[0] * z2 * z3) / ((z1 - z2) * (z1 - z3))
+        # A2 = (nu[2] - nu[1] * (z1 + z3) + nu[0] * z1 * z3) / ((z2 - z1) * (z2 - z3))
+        # A3 = (nu[2] - nu[1] * (z1 + z2) + nu[0] * z1 * z2) / ((z3 - z1) * (z3 - z2))
+        # A = [A1, A2, A3]
 
-        A1 = (nu2 - nu1 * (z2 + z3) + nu0 * z2 * z3) / ((z1 - z2) * (z1 - z3))
-        A2 = (nu2 - nu1 * (z1 + z3) + nu0 * z1 * z3) / ((z2 - z1) * (z2 - z3))
-        A3 = (nu2 - nu1 * (z1 + z2) + nu0 * z1 * z2) / ((z3 - z1) * (z3 - z2))
+        z = np.array([z1, z2, z3])
+        c = np.array([np.ones(3), z, z ** 2])
+        A = np.linalg.solve(c, nu)
 
-        result += A1 * f(z1) + A2 * f(z2) + A3 * f(z3)
+        result += A[0] * f(z1) + A[1] * f(z2) + A[2] * f(z3)
     return result
 
 
@@ -90,124 +79,74 @@ def newton_cotes_3point(f, a, b, alpha, n):
 def cardano(A, B, C, D):
     # Приведение уравнения к каноническому виду y^3+2py+2q+0
     p = (3 * A * C - B ** 2) / (9 * A ** 2)
-    q = (2 * B ** 3 - 9 * A * B * C + 27 * A ** 2 * D) / (54 * A ** 3)
+    q = (2 * (B ** 3) - 9 * A * B * C + 27 * (A ** 2) * D) / (54 * A ** 3)
+    Dis = q ** 2 + p ** 3
 
-    if p < 0 and (q ** 2 + p ** 3 <= 0):
-        Dis = q ** 2 + p ** 3  # дискриминант
-        roots = []
-
-        if Dis < 0:
-            r = np.sqrt(-p)
-            # Вычисление угла phi и проверка его допустимости
-            # cos_phi = q / r ** 3
-            # if not -1 <= cos_phi <= 1:
-            #     raise ValueError(f"Недопустимое значение для cos(phi): {cos_phi}")
-            phi = np.arccos(q / r ** 3)
-
-            # Вычисление корней
-            y1 = -2 * r * np.cos(phi / 3)
-            y2 = 2 * r * np.cos((np.pi - phi) / 3)
-            y3 = 2 * r * np.cos((np.pi + phi) / 3)
-
-            # Преобразование к x
-            x1 = y1 - B / (3 * A)
-            x2 = y2 - B / (3 * A)
-            x3 = y3 - B / (3 * A)
-
-            roots.extend([x1, x2, x3])
-        elif Dis == 0:
-            y = - np.sign(q) * np.cbrt(abs(q))
-            x = y - B / (3 * A)
-
-            roots.extend([x, x, x])
+    if p < 0 and Dis <= 0:
+        if q < 0:
+            r = (-1) * np.sqrt(abs(p))
         else:
-            u = np.cbrt(-q / 2 + np.sqrt(D))
-            v = np.cbrt(-q / 2 - np.sqrt(D))
-            y = u + v
-            x = y - B / (3 * A)
+            r = np.sqrt(abs(p))
 
-            roots.extend([x, None, None])
-        return [root for root in roots if root is not None]
+        # Вычисление угла phi и проверка его допустимости
+        phi = np.arccos(q / r ** 3)
+
+        # Вычисление корней
+        y1 = -2 * r * np.cos(phi / 3)
+        y2 = 2 * r * np.cos((np.pi - phi) / 3)
+        y3 = 2 * r * np.cos((np.pi + phi) / 3)
+
+        # Преобразование к x
+        x1 = y1 - B / (3 * A)
+        x2 = y2 - B / (3 * A)
+        x3 = y3 - B / (3 * A)
+
+        return np.array([x1, x2, x3])
     else:
-        return [None, None, None]
-        # raise ValueError("Уравнение не имеет трёх действительных корней.")
-
-
-# Функция для фильтрации корней по заданному интервалу [a, b]
-# def filter_roots(roots, a, b):
-#     """Возвращает корни, которые лежат в интервале [a, b]."""
-#     return [root for root in roots if a <= root <= b]
+        raise ValueError("Уравнение не имеет трёх действительных корней.")
 
 
 # Функция для выполнения 3-точечной квадратуры Гаусса
-def gauss_3point(f, a, b, n):
-    """Вычисляет интеграл функции f на интервале [a, b] методом Гаусса с 3-точечной квадратурой."""
+def gauss_3point(f, a, b, n, alpha):
+    a_old , b_old = a, b
+    # Замена t = x - a
+    b = b_old - a
+    a = a_old - a
     h = (b - a) / n
+
     result = 0
-
-    for i in range(n):
+    for i in range(n - 1):
         z1 = a + i * h
-        z2 = z1 + h
+        z3 = a + (i + 1) * h
+        z2 = (z1 + z3) / 2
 
-        p = - (f(z1) + f(z2))
-        q = f(z1) + f(z2)
+        # 1) посчитать моменты
+        mu0 = mnt_new(0, z1, z3, alpha)
+        mu1 = mnt_new(1, z1, z3, alpha)
+        mu2 = mnt_new(2, z1, z3, alpha)
+        mu3 = mnt_new(3, z1, z3, alpha)
+        mu4 = mnt_new(4, z1, z3, alpha)
+        mu5 = mnt_new(5, z1, z3, alpha)
 
-        roots = cardano(1, 0, p, q)
+        # 2) вычислить A_j через СЛАУ
+        matr = np.array([
+            [mu0, mu1, mu2],
+            [mu1, mu2, mu3],
+            [mu2, mu3, mu4]
+        ])
+        great_moments = - np.array([mu3, mu4, mu5])
+        Aj = np.linalg.solve(matr, great_moments)
 
-        integral = 0
-        for root in roots:
-            if root is not None and z1 <= root <= b:
-                integral += f(root)
-        result += (integral )
+        # 3) найти узлы x_j как корни кубического ур-я с коэффициентами A_j из (2) — по формулам Кардано
+        xj = cardano(1, Aj[2], Aj[1], Aj[0])
+
+        # 4) найти A
+        c = np.array([np.ones(3), xj, xj ** 2])
+        mu_vec = - np.array([mu0, mu1, mu2])
+        A = np.linalg.solve(c, mu_vec)
+        result += A[0] * f(z1 + a_old) + A[1] * f(z2 + a_old) + A[2] * f(z3 + a_old)
     return result
 
 
 # Задание 2 ////////////////////////////////////////////////////////////////////////////////////////////////////////// #
 
-
-# 3. График зависимости погрешности от числа разбиений
-def calculate_errors(method, true_value, a, b, max_n=100):
-    errors = []
-    ns = range(2, max_n, 2)
-    for n in ns:
-        integral_value = method(f, a, b, n)
-        errors.append(abs(integral_value - true_value))
-    return ns, errors
-
-
-def main(a, b, alpha, beta, n, e):
-    print(left_rectangle_method(f, a, b, n))
-    print(mid_rectangle_method(f, a, b, n))
-    print(trapezoidal_method(f, a, b, n))
-    print(simpson_method(f, a, b, n))
-    print(newton_cotes_3point(f, a, b, alpha, n))
-    print(gauss_3point(f, a, b, n))
-
-    # Точное значение интеграла для оценки погрешности
-    # true_value, _ = integrate.quad(f, a, b)
-    # true_value = 14.2731
-
-    # # Построение графиков
-    # plt.figure(figsize=(10, 6))
-    # methods = {
-    #     "Left Rectangle": left_rectangle_method,
-    #     "Mid Rectangle": mid_rectangle_method,
-    #     "Trapezoidal": trapezoidal_method,
-    #     "Simpson": simpson_method,
-    #     "Newton-Cotes 3-point": newton_cotes_3point
-    # }
-    #
-    # for name, method in methods.items():
-    #     ns, errors = calculate_errors(method, true_value, a, b)
-    #     plt.plot(ns, errors, label=name)
-    #
-    # plt.yscale('log')
-    # plt.xlabel("Number of intervals (n)")
-    # plt.ylabel("Absolute error")
-    # plt.title("Error dependence on the number of intervals")
-    # plt.legend()
-    # plt.grid(True)
-
-
-if __name__ == "__main__":
-    main(a=1.1, b=2.5, alpha=2 / 5, beta=0, n=100, e=1e-6)
