@@ -11,7 +11,7 @@ def mnt(z1, z3, a, alpha):
 
 def mnt_new(i, z1, z3, alpha):
     """Вычисление моментов порядка i на каждом частичном промежутке [a, b] в новых переменных (t = x - a)"""
-    return (z1**(i-alpha+1) - z3**(i-alpha+1)) / (i-alpha+1)
+    return (z1 ** (i - alpha + 1) - z3 ** (i - alpha + 1)) / (i - alpha + 1)
 
 
 # Задание 1.1 //////////////////////////////////////////////////////////////////////////////////////////////////////// #
@@ -53,7 +53,7 @@ def newton_cotes_3point(f, a, b, n, alpha):
     h = (b - a) / n
 
     result = 0
-    for i in range(n-1):
+    for i in range(n):
         z1 = a + i * h
         z3 = a + (i + 1) * h
         z2 = (z1 + z3) / 2
@@ -108,14 +108,14 @@ def cardano(A, B, C, D):
 
 # Функция для выполнения 3-точечной квадратуры Гаусса
 def gauss_3point(f, a, b, n, alpha):
-    a_old , b_old = a, b
+    a_old, b_old = a, b
     # Замена t = x - a
     b = b_old - a
     a = a_old - a
     h = (b - a) / n
 
     result = 0
-    for i in range(n - 1):
+    for i in range(n):
         z1 = a + i * h
         z3 = a + (i + 1) * h
         z2 = (z1 + z3) / 2
@@ -144,9 +144,148 @@ def gauss_3point(f, a, b, n, alpha):
         c = np.array([np.ones(3), xj, xj ** 2])
         mu_vec = - np.array([mu0, mu1, mu2])
         A = np.linalg.solve(c, mu_vec)
+
         result += A[0] * f(z1 + a_old) + A[1] * f(z2 + a_old) + A[2] * f(z3 + a_old)
     return result
 
 
 # Задание 2 ////////////////////////////////////////////////////////////////////////////////////////////////////////// #
+def Richardson_newton(f, a, b, n, alpha, e=1e-6):
+    r = 1
+    Rh = 2  # Начальное значение погрешности, чтобы запустить цикл
+    step_factor = 2  # Коэффициент уменьшения шага
 
+    while np.abs(Rh) > e:
+        Sh, Sh_h = [], []
+
+        # Вычисление значений на сетках с уменьшающимся шагом
+        for j in range(r + 3):
+            num_intervals = n * (step_factor ** j)
+            result = newton_cotes_3point(f, a, b, num_intervals, alpha)
+            Sh.append(result)  # Если функция возвращает одно значение (интеграл)
+            Sh_h.append((b - a) / num_intervals)  # Вычисление шага для текущей сетки
+
+        # Оценка порядка сходимости по процессу Эйткена
+        m = -np.log2((Sh[r + 2] - Sh[r + 1]) / (Sh[r + 1] - Sh[r])) / np.log2(2)
+
+        # Построение системы линейных уравнений
+        blocks, B = [], []
+        for i in range(r + 1):
+            block = [1]  # Константа для первой переменной (J)
+            B.append(Sh[i])  # Значение интеграла на текущем шаге
+            for j in range(r):
+                block.append(-Sh_h[i] ** (m + j))
+            blocks.append(block)
+
+        # Решение системы уравнений для получения J и C_m
+        res = np.linalg.solve(blocks, B)
+        J = float(res[0])
+
+        # Вектор коэффициентов C_m
+        Cm = res[1:]
+
+        # Оценка погрешности
+        Rh = sum(Cm[i] * (Sh_h[r] ** (m + i)) for i in range(len(Cm)))
+
+        r += 1
+        print('\nJ(f) из системы:', J)
+        print(f"Порядок сходимости m: {m}")
+        print('Вектор найденных коэффициентов C_m:\n', Cm)
+        print('Оценка погрешности:', np.abs(Rh))
+        print('J(f) ~=', Sh[r] + np.abs(Rh))
+        print('----------------------------------------------------------------------------------------')
+
+    print('r =', r - 1)
+    print('Длина шага разбиения, при котором была достигнута требуемая точность:', Sh_h[r - 1])
+
+
+def Richardson_gauss(f, a, b, n, alpha, e=1e-6):
+    r = 1
+    Rh = 2  # Начальное значение погрешности, чтобы запустить цикл
+    step = 2  # Коэффициент уменьшения шага
+
+    while np.abs(Rh) > e:
+        Sh, Sh_h = [], []
+
+        # Вычисление значений на сетках с уменьшающимся шагом
+        for j in range(r + 3):
+            num_intervals = n * (step ** j)
+            result = gauss_3point(f, a, b, num_intervals, alpha)
+            Sh.append(result)  # Если gauss_3point возвращает одно значение (интеграл)
+            Sh_h.append((b - a) / num_intervals)  # Вычисление шага для текущей сетки
+
+        # Оценка порядка сходимости по процессу Эйткена
+        try:
+            m = -np.log2((Sh[r + 2] - Sh[r + 1]) / (Sh[r + 1] - Sh[r])) / np.log2(2)
+        except ZeroDivisionError:
+            m = 1  # Установим m в 1, если значения очень близки и вызвали деление на ноль
+
+        # Построение системы линейных уравнений
+        blocks, B = [], []
+        for i in range(r + 1):
+            block = [1]  # Константа для первой переменной (J)
+            B.append(Sh[i])  # Значение интеграла на текущем шаге
+            for j in range(r):
+                block.append(-Sh_h[i] ** (m + j))
+            blocks.append(block)
+
+        # Проверка на вырожденность матрицы и регуляризация
+        blocks = np.array(blocks)
+        if np.linalg.cond(blocks) > 1 / np.finfo(blocks.dtype).eps:
+            print("Матрица близка к вырожденной. Попробуйте увеличить начальное число интервалов.")
+            return None, None
+
+        # Решение системы уравнений для получения J и C_m
+        res = np.linalg.solve(blocks, B)
+        J = float(res[0])
+
+        # Вектор коэффициентов C_m
+        Cm = res[1:]
+
+        # Оценка погрешности
+        Rh = sum(Cm[i] * (Sh_h[r] ** (m + i)) for i in range(len(Cm)))
+
+        r += 1
+        print('\nJ(f) из системы:', J)
+        print(f"Порядок сходимости m: {m}")
+        print('Вектор найденных коэффициентов C_m:\n', Cm)
+        print('Оценка погрешности:', np.abs(Rh))
+        print('J(f) ~=', Sh[r] + np.abs(Rh))
+        print('----------------------------------------------------------------------------------------')
+
+    print('r =', r - 1)
+    print('Длина шага разбиения, при котором была достигнута требуемая точность:', Sh_h[r - 1])
+
+
+def Runge(f, a, b, n, alpha, e=10 ** (-6)):
+    R_h2 = 1000
+    h = (b - a) / n
+
+    j = 0  # начальный множитель для изменения числа интервалов
+    while abs(R_h2) > e:
+        # Вычисления на сетках с разными шагами
+        S_h1 = newton_cotes_3point(f, a, b, n * (2 ** j), alpha)
+        S_h2 = newton_cotes_3point(f, a, b, n * (2 ** (j + 1)), alpha)
+        S_h3 = newton_cotes_3point(f, a, b, n * (2 ** (j + 2)), alpha)
+
+        # Оценка порядка сходимости по правилу Эйткена
+        m = -np.log2((S_h3 - S_h2) / (S_h2 - S_h1)) / np.log2(2)
+
+        # Оценка ошибки по правилу Рунге
+        R_h1 = (S_h2 - S_h1) / (1 - 2 ** (-m))
+        R_h2 = (S_h2 - S_h1) / (2 ** m - 1)
+
+        # Переход на более мелкую сетку
+        j += 1
+
+    # h_2 = (b - a) / (n * 2 ** j)
+    h_opt = h * ((e * (1 - 2 ** (-m))) / np.abs(S_h2 - S_h1)) ** (1 / m)
+
+    # Возврат результата и ошибок
+    integral_approximation = S_h1 + R_h1
+    print(f"iteration: {j}")
+    print(f"Оптимальное кол-во интервалов: {n * 2 ** j}")
+    print(f"Оптимальный шаг: {h_opt}")
+    print(f"Приближенное значение интеграла: {integral_approximation}")
+    print(f"Порядок сходимости m: {m}")
+    print(f"Текущая оценка погрешности: {R_h2}")
