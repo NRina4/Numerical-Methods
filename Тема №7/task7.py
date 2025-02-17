@@ -68,7 +68,7 @@ def newton_cotes_3point(f, a, b, n, alpha):
 
         z = np.array([z1, z2, z3])
         c = np.array([np.ones(3), z, z ** 2])
-        A = np.linalg.solve(c, nu)
+        A = np.linalg.solve(c, nu) # веса
 
         result += A[0] * f(z1) + A[1] * f(z2) + A[2] * f(z3)
     return result
@@ -152,7 +152,7 @@ def gauss_3point(f, a, b, n, alpha):
 # Задание 2 ////////////////////////////////////////////////////////////////////////////////////////////////////////// #
 def Richardson_newton(f, a, b, n, alpha, e=1e-6):
     r = 1
-    Rh = 2  # Начальное значение погрешности, чтобы запустить цикл
+    Rh = np.inf  # Начальное значение погрешности, чтобы запустить цикл
     step_factor = 2  # Коэффициент уменьшения шага
 
     while np.abs(Rh) > e:
