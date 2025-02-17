@@ -1,7 +1,6 @@
 import math
 import copy
 import numpy as np
-import matplotlib.pyplot as plt
 from dataclasses import dataclass
 
 
@@ -12,7 +11,6 @@ class Parameters:
     B: float
     eps: float
     p: float
-    tol: float
     rtol: float
     pi: float
 
@@ -26,35 +24,39 @@ def func(x, y, params: Parameters):
     return np.array([params.A * y[1], - params.B * y[0]])
 
 
-# Двухэтапная расчетная схема ЯМРК 2-го порядка (метод Хойна)
+# Двух-этапная расчетная схема ЯМРК 2-го порядка (метод Хойна)
 def runge_kutta2(x0, x1, y0, h, params: Parameters):
-    n = math.ceil((x1 - x0) / h)  # runge_kutta3
+    n = math.ceil((x1 - x0) / h)  # int((x1 - x0) / h)
     t = np.linspace(x0, x1, n + 1)
     y = np.zeros((n + 1, 2))
     y[0] = copy.deepcopy(y0)
 
+    calc_count = 0
     for i in range(n):
         k1 = h * func(t[i], y[i], params)
         k2 = h * func(t[i] + params.c2 * h, y[i] + params.a21 * k1, params)
         y[i + 1] = y[i] + params.b1 * k1 + params.b2 * k2
+        calc_count += 2
 
-    return y
+    return y[-1], calc_count
 
 
-# Расчетная схема 3-го порядка трехэтапного ЯМРК (вторая)
+# Трех-этапная расчетная схема ЯМРК 3-го порядка (вторая)
 def runge_kutta3(x0, x1, y0, h, params: Parameters):
     n = math.ceil((x1 - x0) / h)
     t = np.linspace(x0, x1, n + 1)
     y = np.zeros((n + 1, 2))
     y[0] = copy.deepcopy(y0)
 
+    calc_count = 0
     for i in range(n):
         k1 = h * func(t[i], y[i], params)
         k2 = h * func(t[i] + h / 3, y[i] + k1 / 3, params)
         k3 = h * func(t[i] + h * 2 / 3, y[i] + k2 * 2 / 3, params)
         y[i + 1] = y[i] + (k1 + 3 * k3) / 4
+        calc_count += 3
 
-    return y
+    return y[-1], calc_count
 
 
 def first_step(x0, x1, y0, s, params: Parameters):
@@ -70,21 +72,21 @@ def first_step(x0, x1, y0, s, params: Parameters):
         delta = (1 / max(abs(x0), abs(x1))) ** (s + 1) + np.linalg.norm(ff) ** (s + 1)
         return (params.rtol / delta) ** (1 / (s + 1))
 
-    h1 = compute_step()
+    h = compute_step()
 
     # Пункты (d) - (e): если большинство компонент f(x0, y0) равно нулю, пересчитываем шаг
     if count > len(ff) / 2:  # Если больше половины значений f(x0, y0) нулевые
-        x0 = x0 + h1
-        y = y + h1 * ff  # Обновляем y по методу Эйлера
+        x0 = x0 + h
+        y = y + h * ff  # Обновляем y по методу Эйлера
         ff = func(x0, y, params)
         h_new = compute_step()
 
-        return min(h1, h_new)
+        return min(h, h_new)
 
-    return h1
+    return h
 
 
-def full_error_rate(x0, x1, y0, h, s, params: Parameters):
+def fix_step(x0, x1, y0, s, params: Parameters):
     if s == 2:
         runge_kutta = runge_kutta2
     elif s == 3:
@@ -92,15 +94,28 @@ def full_error_rate(x0, x1, y0, h, s, params: Parameters):
     else:
         raise ValueError("Метод поддерживает только порядок 2 и 3")
 
-    res_1 = runge_kutta(x0, x1, y0, h, params)
-    res_1 = res_1[-1]
+    values = []  # Список последовательно высчитанных значений
+    full_errors = []  # Список локальных погрешностей
+    steps = []  # Список шагов
+    calc_count = []  # Кол-во вычислений
+    error_norm = np.inf
 
-    res_2 = runge_kutta(x0, x1, y0, h / 2, params)
-    res_2 = res_2[-1]
+    h = first_step(x0, x1, y0, s, params)  # начальный шаг
 
-    R = (np.array(res_2) - np.array(res_1)) / (pow(2, s) - 1)
+    while error_norm > params.eps:
+        y_curr_whole, calcs_whole = runge_kutta(x0, x1, y0, h, params)
+        y_curr_half, calcs_half = runge_kutta(x0, x1, y0, h / 2, params)
 
-    return np.linalg.norm(R)
+        full_error = (y_curr_half - y_curr_whole) / (pow(2, s) - 1)
+        error_norm = np.linalg.norm(full_error)
+
+        values.append(y_curr_half)
+        full_errors.append(error_norm)
+        steps.append(h)
+        calc_count.append(calcs_whole + calcs_half)
+        h = h / 2
+
+    return np.array(values), np.array(full_errors), np.array(steps), np.array(calc_count)
 
 
 def auto_step(x0, x1, y0, s, params: Parameters):
@@ -114,6 +129,7 @@ def auto_step(x0, x1, y0, s, params: Parameters):
     values = []  # Список последовательно высчитанных значений
     local_errors = []  # Список локальных погрешностей
     steps = []  # Список шагов
+    calc_count = []  # Кол-во вычислений
 
     x_k = x0
     y_k = copy.deepcopy(y0)
@@ -122,8 +138,8 @@ def auto_step(x0, x1, y0, s, params: Parameters):
     while x_k < x1:
         h = min(h, x1 - x_k)  # Если шаг "вылетает" за пределы, то возвращаем его
 
-        y_curr_whole = runge_kutta(x_k, x_k + h, y_k, h, params)[-1]
-        y_curr_half = runge_kutta(x_k, x_k + h, y_k, h / 2, params)[-1]
+        y_curr_whole, calcs_whole = runge_kutta(x_k, x_k + h, y_k, h, params)
+        y_curr_half, calcs_half = runge_kutta(x_k, x_k + h, y_k, h / 2, params)
 
         local_error = (y_curr_half - y_curr_whole) / (1 - 2 ** -s)
         error_norm = np.linalg.norm(local_error)
@@ -139,6 +155,7 @@ def auto_step(x0, x1, y0, s, params: Parameters):
             values.append(y_k)
             local_errors.append(error_norm)
             steps.append(h)
+            calc_count.append(calcs_whole + calcs_half)
             h = h / 2
 
         elif params.p / 2 ** (s + 1) < error_norm < params.p:
@@ -148,6 +165,7 @@ def auto_step(x0, x1, y0, s, params: Parameters):
             values.append(y_k)
             local_errors.append(error_norm)
             steps.append(h)
+            calc_count.append(calcs_whole + calcs_half)
 
         else:
             x_k = x_k + h
@@ -156,6 +174,7 @@ def auto_step(x0, x1, y0, s, params: Parameters):
             values.append(y_k)
             local_errors.append(error_norm)
             steps.append(h)
+            calc_count.append(calcs_whole + calcs_half)
             h = 2 * h
 
-    return values, local_errors, steps
+    return np.array(values), np.array(local_errors), np.array(steps), np.array(calc_count)
