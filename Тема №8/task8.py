@@ -24,7 +24,7 @@ def func(x, y, params: Parameters):
     return np.array([params.A * y[1], - params.B * y[0]])
 
 
-# Двух-этапная расчетная схема ЯМРК 2-го порядка (метод Хойна)
+# Двух-этапная расчетная схема ЯМРК 2-го порядка
 def runge_kutta2(x0, x1, y0, h, params: Parameters):
     n = math.ceil((x1 - x0) / h)  # int((x1 - x0) / h)
     t = np.linspace(x0, x1, n + 1)
@@ -95,7 +95,7 @@ def fix_step(x0, x1, y0, s, params: Parameters):
         raise ValueError("Метод поддерживает только порядок 2 и 3")
 
     values = []  # Список последовательно высчитанных значений
-    full_errors = []  # Список локальных погрешностей
+    full_errors = []  # Список полных погрешностей
     steps = []  # Список шагов
     calc_count = []  # Кол-во вычислений
     error_norm = np.inf
@@ -150,7 +150,7 @@ def auto_step(x0, x1, y0, s, params: Parameters):
 
         elif params.p < error_norm < 2 ** s * params.p:
             x_k = x_k + h
-            y_k = y_curr_half
+            y_k = y_curr_whole
 
             values.append(y_k)
             local_errors.append(error_norm)
